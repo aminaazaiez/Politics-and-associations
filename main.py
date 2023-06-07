@@ -9,10 +9,15 @@ import sys
 sys.path.insert(1, '/home/azaiez/Documents/Cours/These/Politics and Associations/Programs')
 from utils.load_data import create_hypergraph
 from utils.general import cdf
+from utils.general import array2dict
 
-from utils.community_detection import louvain_clustering_bipartite
-from utils.community_detection import louvain_clustering_graph
-from utils.community_detection import mutual_inofmation
+
+from utils.community_detection import partition_with_highest_mod
+from utils.community_detection import mutual_inofmation_btw_equal_sized_partitions
+from utils.community_detection import create_sknetwork_bipartite
+from utils.community_detection import partitions_random_shuffle_nodes
+from utils.community_detection import std_cluster_vol
+
 
 from utils.cluster_composition import cumulated_membership_per_cluster
 from utils.cluster_composition import cluster_composition_bar_plot
@@ -22,6 +27,9 @@ from utils.cluster_composition import intra_similarity
 from utils.cluster_composition import inter_similarity
 from utils.cluster_composition import association_graph
 from utils.cluster_composition import plot_association_graph
+from utils.cluster_composition import random_categorization
+
+
 ### Load Data and create the Hypergraph
 
 path='/home/azaiez/Documents/Cours/These/Politics and Associations/Programs/'
@@ -39,7 +47,6 @@ FM = { individual_id : list(formal_membership.split("/")) for individual_id, for
 
 ### Cumulative distribution functions of degree strength weight cardinality
 
-    
 features = [[H.degree(agent) for agent in H.nodes()] , [H.nodes[agent].strength for agent in H.nodes()], [H.size(e) for e in H.edges()],  [H.edges[e].weight for e in H.edges()]]
 labels = ['Node degree', 'Node strength', 'Edge cardinality', 'Edge weigth']
 notations =['k_i', 's_i', 'd_e', 'w_e']
@@ -51,20 +58,64 @@ for feature,label,notation in zip(features,labels, notations):
     plt.savefig(path +'Figures/%s.pdf' %label)
     plt.close(fig)
 ############# Community detection ###############
-
-start , stop, step = 0 , 10, 0.1
+#Generate random partitions with different resultution parameters
+nb_itt = 5
+start , stop, step = 0 , 5, 1
 rs = np.arange (start, stop, step)
-nb_clusters, mi = mutual_inofmation(H,rs)            
+partitions_b = []
+partitions_g = []
+for r in rs:
+    print(r)
+    partitions_b += partitions_random_shuffle_nodes(H, 'Louvain_b', nb_itt, res=r)
+    partitions_g += partitions_random_shuffle_nodes(H, 'Louvain_g', nb_itt, res=r)        
+partitions_b_nodes = [partition[0] for partition in partitions_b] 
+
+#Mutual information between partitions of the same size
+
+nb_clusters, mi = mutual_inofmation_btw_equal_sized_partitions(partitions_g , partitions_b_nodes)
 
 fig,ax = plt.subplots( figsize = (5,5))
-ax.scatter(nb_clusters, mi, s =10)
+ax.scatter(nb_clusters, mi, s =10, alpha =0.1)
 ax.set_xlabel('$q$')
 ax.set_ylabel(r'$I_{norm}$')
 plt.tight_layout()
-fig.savefig(path +'Figures/MI_vs_nb_clusters.pdf')
+fig.savefig(path +'Figures/MI_vs_nb_clusters.png')
+
+#Standard deviation of clusters' volume
+network = create_sknetwork_bipartite(H)
+nb_clusters_g , std_g , nb_clusters_b, std_b =[],[],[],[]
+for i, (partition_g, partition_b) in enumerate( zip(partitions_g, partitions_b_nodes)):
+    print(i)
+    nb_clusters_g_ , std_g_ = std_cluster_vol(H, partition_g, network.names) 
+    nb_clusters_g.append(nb_clusters_g_)
+    std_g.append(std_g_)
+    nb_clusters_b_ , std_b_ = std_cluster_vol(H, partition_b, network.names) 
+    nb_clusters_b.append(nb_clusters_b_)
+    std_b.append(std_b_)
+##    
+fig,ax = plt.subplots( figsize = (5,5))
+kwargs = { 'marker' : 'o' , 's' : 2 , 'alpha': 0.1}
+ax.scatter( nb_clusters_g, std_g, label='Graph' , **kwargs)
+ax.scatter( nb_clusters_b, std_b, label='Hypergraph' , **kwargs)
+#ax.set_title('volume std')
+ax.set_xlabel(r'$q$')    
+ax.set_ylabel('std')    
+plt.close(fig)
+ax.legend()
+plt.tight_layout()
+fig.savefig(path+'Figures/std_comm_vol_vs_nb_clusters.pdf')
+plt.close(fig)
+
+
+############# Cluster Composition ###############
+
+## Partition of nodes 
+nb_itt = 700
+algo_name = 'Louvain_b'
+clusters , clusters_e = partition_with_highest_mod(H, algo_name, nb_itt)
+clusters_n = array2dict(clusters, create_sknetwork_bipartite(H).names)    
     
-## Standard deviation individuals' strength clusters 
-clusters_n,clusters_e = louvain_clustering_bipartite(H)
+## Standard deviation individuals' strength per cluster
 
 std_intra = [np.std([ H.nodes[agent].strength for agent in c]) for c in clusters_n.values()]
 mean_intra = [np.mean([ H.nodes[agent].strength for agent in c]) for c in clusters_n.values()]
@@ -81,9 +132,7 @@ fig,ax = plt.subplots( )
 ax = plot_association_graph(G, ax, vol_c)
 fig.savefig(path +'Figures/comm_graph.pdf')
 
-############# Cluster Composition ###############
-clusters_n,clusters_e = louvain_clustering_bipartite(H)
-
+## Category of memberships per cluster
 cat_c = cumulated_membership_per_cluster(clusters_n , FM, orga_cat) #dictionary of counters
 categories = ['Political','Art', 'Educational', 'Sport', 'Human Service', 'Recreational', 'Environmental-Protection', 'Occupational', 'Professional']
 result={}        # dictionary of list of lenght = len(categorie). 
@@ -102,19 +151,11 @@ ax.set_title('Clustering of nodes')
 fig.savefig(path +'Figures/categorial composition.pdf')
 ## Similarity between agents
 
-def orga_composition(H,FM):
-    d={}
-    for agent in H.nodes():
-        memberships = FM[agent]
-        for asso in memberships:
-            try:
-                d[asso].append(agent)
-            except:
-                d[asso] = [agent]
-    return(d)
-#Compute orga_similarity or orga category similarity
-clusters_n,clusters_e = louvain_clustering_graph(H)
+#Compute orga_similarity 
+  
 M=vectorization_agents_orga(clusters_n, FM , list(orga_cat.keys()))
+#M = vectorization_agents_cat(clusters_n, FM , orga_cat)
+
 cos_intra = intra_similarity(M)
 cos_inter = inter_similarity(M)
 #Plot orga sim
@@ -128,29 +169,21 @@ plt.xlabel('Similarity')
 plt.ylabel('Density')
 plt.legend()
 plt.tight_layout()
-fig.savefig(path +'Figures/orga_sim_projection.pdf')
+fig.savefig(path +'Figures/orga_sim.pdf')
 ##
-#Compute category similarity with random assignation of category for associations
-nb_itt =10
+#Compute category similarity with random assignation of category for organizations
+nb_itt =200
 c_inter=Counter()
 c_intra=Counter()
 
 for itt in range (nb_itt):
     print(itt)
-    count = Counter(orga_cat.values())
-    r_orga_cat ={}
-    for orga in orga_cat.keys():
-        remained_cat = [ cat for cat in count.keys() if count[cat]>0]
-        cat = np.random.choice(remained_cat)
-        r_orga_cat[orga] = cat
-        count[cat] -=1
+    r_orga_cat = random_categorization(orga_cat)
     M = vectorization_agents_cat(clusters_n, FM , r_orga_cat)
     cos_intra = intra_similarity(M)
     cos_inter = inter_similarity(M)
-    c_inter_= Counter({i : sim for i , sim in enumerate(cos_inter) })
-    c_intra_= Counter({i : sim for i , sim in enumerate(cos_intra) })
-    c_inter +=c_inter_
-    c_intra += c_intra_
+    c_inter += Counter({i : sim for i , sim in enumerate(cos_inter) })
+    c_intra += Counter({i : sim for i , sim in enumerate(cos_intra) })
     
 for couple in c_inter.keys():
     c_inter[couple]/=nb_itt
@@ -164,14 +197,13 @@ cos_inter_emp = inter_similarity(M)
 step = 0.07
 bins = np.arange ( 0, 1+step , step)
 fig, axs =plt.subplots(1,2 , sharey = True, figsize = (10,5))
-plt.close(fig)
 
-for ax, similarity , type , colors in zip (axs,[ [cos_inter_emp,c_inter.values() ],[cos_intra_emp,c_intra.values()]], ['Inter-similarity', 'Intra-similarity'], [['darkcyan','aliceblue' ],['darkorange','moccasin' ]]):  
+for ax, similarity , sim_type , colors in zip (axs,[ [cos_inter_emp,c_inter.values() ],[cos_intra_emp,c_intra.values()]], ['Inter-similarity', 'Intra-similarity'], [['darkcyan','aliceblue' ],['darkorange','moccasin' ]]):  
     ax.hist(similarity[0], label = 'empirical', **kwargs, color =colors[0])
     ax.hist(similarity[1], label = 'random', **kwargs, color = colors[1])
-    ax.set_title(type)
+    ax.set_title(sim_type)
     ax.set_xlabel('Similarity')
     ax.set_ylabel('Density')
     ax.legend()
-fig.savefig(path +'Figures/cat_sim.pdf')
+fig.savefig(path +'Figures/random_cat_sim.pdf')
 

@@ -110,3 +110,15 @@ def intra_similarity(M):
         for u , v in l :
             cos.append( np.dot(M_c[u],M_c[v]) / (np.linalg.norm(M_c[u]) * np.linalg.norm(M_c[v])))
     return(cos)
+    
+##Random categorization
+
+def random_categorization(orga_cat):
+    count = Counter(orga_cat.values())
+    r_orga_cat ={}
+    for orga in orga_cat.keys():
+        remained_cat = [ cat for cat in count.keys() if count[cat]>0]
+        cat = np.random.choice(remained_cat)
+        r_orga_cat[orga] = cat
+        count[cat] -=1
+    return(r_orga_cat)

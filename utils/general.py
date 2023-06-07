@@ -23,3 +23,27 @@ def part2dict(A):
     for i in range(len(A)):
         x.extend([(a, i) for a in A[i]])
     return {k: v for k, v in x}
+    
+def array2dict(A, node_labels):
+    ''' Using a 1-D array where A[i] is the cluster to which agent i belongs, return the dictionnary of partition
+        Paramters 
+        ---------
+        A : 1D array shape (nb_nodes,) 
+        
+        node_labels: 1D array shape (nb_nodes,) 
+        
+        Returns
+        -------
+        clusters_: dict
+            clusters_[i]: list of agent belonging to the cluster i'''
+    n= len(set(A)) # = number of clusters
+    # clusters of nodes
+    clusters_ ={i : [] for i in range(n)}
+    for c , p in zip( A, node_labels):
+        clusters_[c].append(p)
+    return(clusters_)
+    
+def volume(H, cluster):
+    return(sum([H.nodes[i].strength for i in cluster]))
+    
+    
