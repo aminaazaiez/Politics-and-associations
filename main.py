@@ -2,33 +2,19 @@ import pandas as pd
 import hypernetx as hnx
 import numpy as np
 from collections import Counter
+from sknetwork.ranking import Betweenness
+from sknetwork.ranking import Closeness
+from scipy import stats
 
 import matplotlib.pyplot as plt
 
 import sys 
 sys.path.insert(1, '/home/azaiez/Documents/Cours/These/Politics and Associations/Programs')
 from utils.load_data import create_hypergraph
-from utils.general import cdf
-from utils.general import array2dict
-
-
-from utils.community_detection import partition_with_highest_mod
-from utils.community_detection import mutual_inofmation_btw_equal_sized_partitions
-from utils.community_detection import create_sknetwork_bipartite
-from utils.community_detection import partitions_random_shuffle_nodes
-from utils.community_detection import std_cluster_vol
-
-
-from utils.cluster_composition import cumulated_membership_per_cluster
-from utils.cluster_composition import cluster_composition_bar_plot
-from utils.cluster_composition import vectorization_agents_orga
-from utils.cluster_composition import vectorization_agents_cat
-from utils.cluster_composition import intra_similarity
-from utils.cluster_composition import inter_similarity
-from utils.cluster_composition import association_graph
-from utils.cluster_composition import plot_association_graph
-from utils.cluster_composition import random_categorization
-
+from utils.general import *
+from utils.community_detection import *
+from utils.cluster_composition import *
+from utils.centrality import *
 
 ### Load Data and create the Hypergraph
 
@@ -37,7 +23,7 @@ path='/home/azaiez/Documents/Cours/These/Politics and Associations/Programs/'
 activities = pd.read_excel( path+'activities.ods',engine='odf', index_col = 'Activity')
 individuals = pd.read_excel( path+'individual_carac.ods',engine='odf', index_col = 'Individual')
 orga = pd.read_excel( path+ 'orga_carac.ods',engine='odf', index_col = 'Orga')
-    
+
 w= [F for F in activities['Frequency']] # weights
 edges = [s.split('/') for s in list( activities ['Individuals'])]
 H = create_hypergraph(edges, w)
@@ -59,20 +45,23 @@ for feature,label,notation in zip(features,labels, notations):
     plt.close(fig)
 ############# Community detection ###############
 #Generate random partitions with different resultution parameters
-nb_itt = 5
-start , stop, step = 0 , 5, 1
+nb_itt = 100
+start , stop, step = 0 , 5, 0.1
 rs = np.arange (start, stop, step)
-partitions_b = []
-partitions_g = []
-for r in rs:
-    print(r)
-    partitions_b += partitions_random_shuffle_nodes(H, 'Louvain_b', nb_itt, res=r)
-    partitions_g += partitions_random_shuffle_nodes(H, 'Louvain_g', nb_itt, res=r)        
-partitions_b_nodes = [partition[0] for partition in partitions_b] 
 
+partitions = pd.DataFrame(columns = ['seed', 'r','Partition', 'q', 'algo_name' ])
+for algo_name in ['Louvain_b', 'Louvain_g']:
+    adjacency_matrix = check_algo_name(H, algo_name)
+    for r in rs:
+        print('r = %.2f')
+        for i in range (nb_itt):
+            partition = Clustering(adjacency_matrix , algo_name, res=r, random_state = i ) 
+            partitions = pd.concat([partitions, pd.DataFrame({'seed' : i, 'r' : r, 'Partition' : [partition], 'algo_name' :algo_name, 'q' : np.max(partition) +1}) ], ignore_index=True )
+            
+##
 #Mutual information between partitions of the same size
 
-nb_clusters, mi = mutual_inofmation_btw_equal_sized_partitions(partitions_g , partitions_b_nodes)
+nb_clusters, mi =  mutual_inofmation_btw_equal_sized_partitions(partitions)
 
 fig,ax = plt.subplots( figsize = (5,5))
 ax.scatter(nb_clusters, mi, s =10, alpha =0.1)
@@ -83,60 +72,59 @@ fig.savefig(path +'Figures/MI_vs_nb_clusters.png')
 
 #Standard deviation of clusters' volume
 network = create_sknetwork_bipartite(H)
-nb_clusters_g , std_g , nb_clusters_b, std_b =[],[],[],[]
-for i, (partition_g, partition_b) in enumerate( zip(partitions_g, partitions_b_nodes)):
+std = []
+for i , partition in enumerate(partitions['Partition']):
     print(i)
-    nb_clusters_g_ , std_g_ = std_cluster_vol(H, partition_g, network.names) 
-    nb_clusters_g.append(nb_clusters_g_)
-    std_g.append(std_g_)
-    nb_clusters_b_ , std_b_ = std_cluster_vol(H, partition_b, network.names) 
-    nb_clusters_b.append(nb_clusters_b_)
-    std_b.append(std_b_)
-##    
-fig,ax = plt.subplots( figsize = (5,5))
-kwargs = { 'marker' : 'o' , 's' : 2 , 'alpha': 0.1}
-ax.scatter( nb_clusters_g, std_g, label='Graph' , **kwargs)
-ax.scatter( nb_clusters_b, std_b, label='Hypergraph' , **kwargs)
-#ax.set_title('volume std')
-ax.set_xlabel(r'$q$')    
-ax.set_ylabel('std')    
-plt.close(fig)
+    std.append(std_cluster_vol(H, list(partition), network.names)) 
+partitions['std_vol']= std
+#save partition to json file
+#partitions.to_csv(path+'random_partitions.csv')
+##
+#compute mean and standard of mean of std_vol
+
+fig, ax =plt.subplots(figsize =(5,5))
+
+for algo_name in ['Louvain_b', 'Louvain_g']:
+    df = pd.DataFrame( partitions.query("algo_name == '%s'" %algo_name).groupby(['q'])['std_vol'].mean())
+    df['error'] = partitions.query("algo_name == '%s'" %algo_name).groupby(['q'])['std_vol'].sem(ddof = 0)
+
+    df['std_vol'].plot(ax =ax , label = algo_name )
+    ax.fill_between(df.index, df['std_vol']+df['error'],  df['std_vol']-df['error'], alpha = 0.5)
+    
 ax.legend()
+ax.set_ylabel('std')    
 plt.tight_layout()
 fig.savefig(path+'Figures/std_comm_vol_vs_nb_clusters.pdf')
 plt.close(fig)
-
 
 ############# Cluster Composition ###############
 
 ## Partition of nodes 
 nb_itt = 700
 algo_name = 'Louvain_b'
-clusters , clusters_e = partition_with_highest_mod(H, algo_name, nb_itt)
-clusters_n = array2dict(clusters, create_sknetwork_bipartite(H).names)    
+clusters = array2dict(partition_with_highest_mod(H, algo_name, nb_itt), create_sknetwork_bipartite(H).names)   
     
 ## Standard deviation individuals' strength per cluster
 
-std_intra = [np.std([ H.nodes[agent].strength for agent in c]) for c in clusters_n.values()]
-mean_intra = [np.mean([ H.nodes[agent].strength for agent in c]) for c in clusters_n.values()]
+std_intra = [np.std([ H.nodes[agent].strength for agent in c]) for c in clusters.values()]
+mean_intra = [np.mean([ H.nodes[agent].strength for agent in c]) for c in clusters.values()]
 
-for i in range(len(( clusters_n))):
+for i in range(len(( clusters))):
     print( '\t ',i+1, '\t &',  '%.2f'%mean_intra[i], '\t &', '%.2f'%std_intra[i], '\\\\')
 
 ## Graph of clusters 
-G = association_graph (H , clusters_n )
-vol_c = {c:  sum([H.nodes[i].strength for i in H.nodes() if i in clusters_n[c]])  for c in range(len(clusters_n))}
+G = association_graph (H , clusters )
+vol_c = {c:  sum([H.nodes[i].strength for i in H.nodes() if i in clusters[c]])  for c in range(len(clusters))}
 
 fig,ax = plt.subplots( )
-
 ax = plot_association_graph(G, ax, vol_c)
 fig.savefig(path +'Figures/comm_graph.pdf')
 
 ## Category of memberships per cluster
-cat_c = cumulated_membership_per_cluster(clusters_n , FM, orga_cat) #dictionary of counters
+cat_c = cumulated_membership_per_cluster(clusters , FM, orga_cat) #dictionary of counters
 categories = ['Political','Art', 'Educational', 'Sport', 'Human Service', 'Recreational', 'Environmental-Protection', 'Occupational', 'Professional']
-result={}        # dictionary of list of lenght = len(categorie). 
-for c in clusters_n.keys():
+result={}        # dictionary of list of lenght = len(categorie).
+for c in clusters.keys():
     result[c] =[]
     for cat in categories:
         if cat in cat_c[c]:
@@ -153,8 +141,8 @@ fig.savefig(path +'Figures/categorial composition.pdf')
 
 #Compute orga_similarity 
   
-M=vectorization_agents_orga(clusters_n, FM , list(orga_cat.keys()))
-#M = vectorization_agents_cat(clusters_n, FM , orga_cat)
+M=vectorization_agents_orga(clusters, FM , list(orga_cat.keys()))
+#M = vectorization_agents_cat(clusters, FM , orga_cat)
 
 cos_intra = intra_similarity(M)
 cos_inter = inter_similarity(M)
@@ -179,7 +167,7 @@ c_intra=Counter()
 for itt in range (nb_itt):
     print(itt)
     r_orga_cat = random_categorization(orga_cat)
-    M = vectorization_agents_cat(clusters_n, FM , r_orga_cat)
+    M = vectorization_agents_cat(clusters, FM , r_orga_cat)
     cos_intra = intra_similarity(M)
     cos_inter = inter_similarity(M)
     c_inter += Counter({i : sim for i , sim in enumerate(cos_inter) })
@@ -190,7 +178,7 @@ for couple in c_inter.keys():
 for couple in c_intra.keys():
     c_intra[couple]/=nb_itt
 # empirical case    
-M=vectorization_agents_cat(clusters_n, FM , orga_cat)
+M=vectorization_agents_cat(clusters, FM , orga_cat)
 cos_intra_emp = intra_similarity(M)
 cos_inter_emp = inter_similarity(M)
 #plot
@@ -207,3 +195,50 @@ for ax, similarity , sim_type , colors in zip (axs,[ [cos_inter_emp,c_inter.valu
     ax.legend()
 fig.savefig(path +'Figures/random_cat_sim.pdf')
 
+######################### Centrality ##########################
+nb_itt = 700
+algo_name = 'Louvain_b'
+clusters = array2dict(partition_with_highest_mod(H, algo_name, nb_itt), create_sknetwork_bipartite(H).names)    
+#Degree centralities
+individuals['Strength'] = [H.nodes[agent].strength for agent in individuals.index]
+individuals['Diversity'] = diversity(H , clusters , individuals.index)
+#Eigenvector
+individuals['EV linear'] = eigenvector(H,'linear', individuals.index)
+individuals['EV log expo'] = eigenvector(H, 'log exp', individuals.index)
+individuals['EV max']  = eigenvector(H, 'max' , individuals.index)
+#Core to periphery 
+individuals['Core to Periphery']  = core_to_periphery(H,clusters, individuals.index)
+#clique expansion 
+network  = create_sknetwork_graph_n(H)
+btw_ = Betweenness().fit_predict(network.adjacency)
+cls_ =  Closeness().fit_predict(network.adjacency)
+
+btw = { agent : btw_[i] for i, agent in enumerate(network.names)}
+cls = { agent : cls_[i] for i, agent in enumerate(network.names)}
+individuals['Betweenness'] = [ btw[agent]  for agent in individuals.index]
+individuals['Closeness'] = [ cls[agent]  for agent in individuals.index]
+
+# using networkx
+I =nx_clique_expansion(H)
+btw_weighted_nx = nx.betweenness_centrality(I, normalized = True, weight = 'weight')
+closeness = nx.closeness_centrality(I, distance = 'weight')
+individuals['Betweenness'] = [ btw_weighted_nx[agent]  for agent in individuals.index]
+individuals['Closeness'] = [ closeness[agent]  for agent in individuals.index]
+#Political participation
+pol = Political_Body(orga_cat = orga_cat, individuals = individuals)
+individuals['Political Participation'] = political_participation(H , individuals,  individuals.index)
+# print correlation btw political participation and centralities
+centralities_label  = [ 'Strength','Diversity', 'EV linear', 'EV log expo' , 'EV max','Core to Periphery' , 'Betweenness', 'Closeness' ]
+
+for label in centralities_label:
+    P_corr = individuals.groupby(['Political Body']).corr(numeric_only = True)['Political Participation']['Y'][label]
+    n_P_corr = individuals.groupby(['Political Body']).corr(numeric_only = True)['Political Participation']['N'][label]
+    print('%s		&	%.3f &		%.3f \\\ '  %(label, P_corr, n_P_corr) )
+#print correlation btw president and centralities
+individuals = individuals.replace({'President': { 'P' : 1, 'N' : 0 } })
+pointbiserial = individuals.groupby(['Political Body'])[['Political Participation' ]+ centralities_label].corrwith(individuals['President'], method=stats.pointbiserialr)
+
+for cent in ['Political Participation' ] + centralities_label: 
+    print(cent, '&  %.3f'%pointbiserial[cent]['N'][0],  '& %.3f'%pointbiserial[cent]['N'][1], '\\\\')
+    
+    

@@ -1,4 +1,8 @@
 import numpy as np
+from sknetwork.data import from_edge_list
+import networkx as nx
+import itertools
+
 
 def cdf (ax, data, label):
     N=len(data)
@@ -43,7 +47,51 @@ def array2dict(A, node_labels):
         clusters_[c].append(p)
     return(clusters_)
     
-def volume(H, cluster):
-    return(sum([H.nodes[i].strength for i in cluster]))
+
     
-    
+## clique_expansion using networkx 
+def nx_clique_expansion(H):
+    I = nx.Graph()
+    dict = {}
+    for e in H.edges():
+        for u, v in itertools.combinations(H.edges[e],2):
+            try:
+                dict[(u,v)]+= H.edges[e].weight
+            except:
+                dict[(u,v)]= H.edges[e].weight
+    for (u,v), w in dict.items():
+        I.add_edge(u,v, weight =w )
+    return(I)
+## clique_expansion using sknetwork 
+
+def create_sknetwork_graph_n(H):    
+    edge_list=[]    
+    for e in H.edges():
+        for u, v in itertools.combinations(H.edges[e],2):
+            edge_list.append((u,v, H.edges[e].weight))
+    graph = from_edge_list(edge_list, sum_duplicates = True)            
+    return(graph)
+
+## clique_expansion using networkx 
+
+def create_sknetwork_bipartite(H):
+    edge_list= []
+    for e in H.edges():
+        for agent in H.edges[e]:
+            edge_list.append( ( agent, int(e) ,H.edges[e].weight))
+    graph = from_edge_list(edge_list, bipartite=True, sum_duplicates =True)  
+    return graph 
+
+
+#
+def check_algo_name(H, algo_name):
+    if algo_name == 'Louvain_b':
+        network =  create_sknetwork_bipartite(H)
+        adjacency_matrix = network.biadjacency
+        
+    elif algo_name == 'Louvain_g':
+        network =  create_sknetwork_graph_n(H)
+        adjacency_matrix = network.adjacency
+    else :
+        print('Error, choose algo name between Louvain_b and Louvain_g')
+    return( adjacency_matrix)
