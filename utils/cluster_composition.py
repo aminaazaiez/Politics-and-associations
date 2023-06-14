@@ -8,36 +8,8 @@ import seaborn as sns
 import numpy as np
 
   
-## Community graph    
-def association_graph (H, communities):
-    G =nx.Graph()
-    membership = part2dict(communities)
-    for e in H.edges():
-        w = H.edges[e].weight
-        d = H.size(e)
-        a = Counter([membership[n] for n in H.edges[e]])
-        for A1,A2 in list(itertools.combinations(a,2)) :
-            try :
-                G.get_edge_data(A1,A2)['weight']+= w * (a[A1] + a[A2])/d
-            except:
-                G.add_weighted_edges_from([(A1, A2, w * (a[A1] + a[A2])/d)])
-    return(G)
 
-def plot_association_graph(G,ax, vol_c):
-    ''' G = weighted graph (given by association graph)
-        vol_c = dictionnary { C : vol(C)} vol(C) = sum of the strengths of the nodes in C'''
-    pos=graphviz_layout(G)
-    labels = { u: u+1 for u in G.nodes()}
-    edgewidth = [  0.5+ G.get_edge_data(u,v)['weight']/10  for u,v in G.edges()]
-    nodesize = [ vol_c[c] for c in G.nodes()] 
-    ax = nx.draw_networkx_nodes(G, pos, node_size = nodesize,  alpha=0.9)
-    ax = nx.draw_networkx_edges(G, pos, alpha=0.5, width=edgewidth, edge_color="dimgray")
-    label_options = {"ec": "k", "fc": "white", "alpha": 0.7}
-    ax = nx.draw_networkx_labels(G, pos, labels, font_size=10, bbox=label_options)
-    plt.box(on=False)
-    
-    return(ax)
-    
+
 ## Cluster composition 
 def cumulated_membership_per_cluster(clusters, id, asso_cat):
     ''' clusters  = {i : cluster[i]}  clusters is dictionary where i in the index of the cluster and clusters[i] is a list of the agent in the cluster_i 

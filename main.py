@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 import sys 
 sys.path.insert(1, '/home/azaiez/Documents/Cours/These/Politics and Associations/Programs')
-from utils.load_data import create_hypergraph
+from utils.load_data import *
 from utils.general import *
 from utils.community_detection import *
 from utils.cluster_composition import *
@@ -112,13 +112,6 @@ mean_intra = [np.mean([ H.nodes[agent].strength for agent in c]) for c in cluste
 for i in range(len(( clusters))):
     print( '\t ',i+1, '\t &',  '%.2f'%mean_intra[i], '\t &', '%.2f'%std_intra[i], '\\\\')
 
-## Graph of clusters 
-G = association_graph (H , clusters )
-vol_c = {c:  sum([H.nodes[i].strength for i in H.nodes() if i in clusters[c]])  for c in range(len(clusters))}
-
-fig,ax = plt.subplots( )
-ax = plot_association_graph(G, ax, vol_c)
-fig.savefig(path +'Figures/comm_graph.pdf')
 
 ## Category of memberships per cluster
 cat_c = cumulated_membership_per_cluster(clusters , FM, orga_cat) #dictionary of counters
@@ -241,4 +234,27 @@ pointbiserial = individuals.groupby(['Political Body'])[['Political Participatio
 for cent in ['Political Participation' ] + centralities_label: 
     print(cent, '&  %.3f'%pointbiserial[cent]['N'][0],  '& %.3f'%pointbiserial[cent]['N'][1], '\\\\')
     
+############# Export gephi file for vizualizartion #############
+#Clustering to arritube cluster belonging to nodes
+nb_itt = 700
+algo_name = 'Louvain_b'
+I = create_sknetwork_bipartite(H)
+idx = partition_with_highest_mod(H, algo_name, nb_itt, return_idx = True)
+clusters  = Clustering( I.biadjacency, 'Louvain_b',  random_state = idx, get_edge_label = True )
+#create nx bipartite graph
+s_edges, s_weights = split_data(edges , w)
+
+B = nx.Graph()
+
+# Add nodes with the node attribute "bipartite"
+for e , c in zip(I.names_col , clusters[1]):
+    B.add_node(e, bipartite= 'edge', cluster = c)
+for a , c in zip(I.names , clusters[0]):
+    B.add_node(a, bipartite= 'node', cluster = c)
+
+for edge , node , w_ in zip (s_edges[0] , s_edges[1] , s_weights):
+    B.add_edge( edge, node , weight =w_)
+
+
+nx.write_gexf(B, path+"export2gephi/test.gexf")
     

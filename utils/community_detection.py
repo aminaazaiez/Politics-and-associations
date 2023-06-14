@@ -34,7 +34,7 @@ def modularity(adjacency_matrix, algo_name , partition):
         return(get_modularity(adjacency_matrix, partition))
     else : print('Error')
 
-def partition_with_highest_mod(H, algo_name, nb_itt):
+def partition_with_highest_mod(H, algo_name, nb_itt, return_idx = False):
     ''' Partition the nodes and edges into clusters using the modularity function for bipartite graph proposed by Barder (2007) and the Newmann modularity function for the clique expansion 
     Parameters 
     ---------
@@ -57,6 +57,8 @@ def partition_with_highest_mod(H, algo_name, nb_itt):
         partition = Clustering(adjacency_matrix , algo_name, random_state = i , get_edge_label = True) 
         partitions = pd.concat([partitions, pd.DataFrame({'seed' : i,  'algo_name' :algo_name,  'modularity' : [modularity(adjacency_matrix, algo_name , partition)] } ) ], ignore_index=True )
     max_index = partitions.iloc[partitions['modularity'].idxmax()]['seed']
+    if return_idx :
+        return(max_index)
     return(Clustering(adjacency_matrix , algo_name, random_state = max_index ))
 
     
