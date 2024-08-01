@@ -34,7 +34,7 @@ FM = { individual_id : list(formal_membership.split("/")) for individual_id, for
 ### Cumulative distribution functions of degree strength weight cardinality
 
 features = [[H.degree(agent) for agent in H.nodes()] , [H.nodes[agent].strength for agent in H.nodes()], [H.size(e) for e in H.edges()],  [H.edges[e].weight for e in H.edges()]]
-labels = ['Node degree', 'Node strength', 'Edge cardinality', 'Edge weigth']
+labels = ['Node degree', 'Node strength', 'Edge cardinality', 'Edge weight']
 notations =['k_i', 's_i', 'd_e', 'w_e']
 
 for feature,label,notation in zip(features,labels, notations):
@@ -44,7 +44,7 @@ for feature,label,notation in zip(features,labels, notations):
     plt.savefig(path +'Figures/%s.pdf' %label)
     plt.close(fig)
 ############# Community detection ###############
-#Generate random partitions with different resultution parameters
+#Generate random partitions with different resoltution parameters
 nb_itt = 100
 start , stop, step = 0 , 5, 0.1
 rs = np.arange (start, stop, step)
@@ -58,10 +58,35 @@ for algo_name in ['Louvain_b', 'Louvain_g']:
             partition = Clustering(adjacency_matrix , algo_name, res=r, random_state = i ) 
             partitions = pd.concat([partitions, pd.DataFrame({'seed' : i, 'r' : r, 'Partition' : [partition], 'algo_name' :algo_name, 'q' : np.max(partition) +1}) ], ignore_index=True )
             
+#save partition to json file
+#partitions.to_json(path+'random_partitions.csv')
+
+## resolution parameter r = 1
+#Mutual information between partitions for r=1 for both alogrithms separately
+
+partitions = pd.read_json(path + 'random_partitions.json')
+algo_name = ['Louvain_g' , 'Louvain_b']
+for algo in algo_name:
+    ps = partitions[(partitions['r'] == 1) & (partitions['algo_name'] == algo)]['Partition']
+    m_i = [ normalized_mutual_info_score (p1,p2) for p1,p2 in itertools.combinations(ps, 2)]
+    print(algo, np.mean(m_i), np.std(m_i))
+
+# Cross mutual information between partitions for r=1 
+pgs = partitions[(partitions['r'] == 1) & (partitions['algo_name'] == 'Louvain_g')]['Partition']
+
+pbs = partitions[(partitions['r'] == 1) & (partitions['algo_name'] == 'Louvain_b')]['Partition']
+m_i = [ normalized_mutual_info_score (p1,p2) for p1 in pgs for p2 in pbs]
+print(np.mean(m_i), np.std(m_i))
+
+# mean q and std_
+print('q_G = ', partitions[(partitions['r'] == 1) & (partitions['algo_name'] == 'Louvain_g')]['q'].mean())
+print('q_B = ', partitions[(partitions['r'] == 1) & (partitions['algo_name'] == 'Louvain_b')]['q'].mean())
+print('std_G = ', partitions[(partitions['r'] == 1) & (partitions['algo_name'] == 'Louvain_g')]['std_vol'].mean())
+print('std_B = ', partitions[(partitions['r'] == 1) & (partitions['algo_name'] == 'Louvain_b')]['std_vol'].mean())
 ##
 #Mutual information between partitions of the same size
 
-nb_clusters, mi =  mutual_inofmation_btw_equal_sized_partitions(partitions)
+nb_clusters, mi =  mutual_information_btw_equaly_sized_partitions(partitions)
 
 fig,ax = plt.subplots( figsize = (5,5))
 ax.scatter(nb_clusters, mi, s =10, alpha =0.1)
@@ -77,18 +102,18 @@ for i , partition in enumerate(partitions['Partition']):
     print(i)
     std.append(std_cluster_vol(H, list(partition), network.names)) 
 partitions['std_vol']= std
-#save partition to json file
-#partitions.to_csv(path+'random_partitions.csv')
+
+
 ##
 #compute mean and standard of mean of std_vol
 
 fig, ax =plt.subplots(figsize =(5,5))
 
-for algo_name in ['Louvain_b', 'Louvain_g']:
-    df = pd.DataFrame( partitions.query("algo_name == '%s'" %algo_name).groupby(['q'])['std_vol'].mean())
-    df['error'] = partitions.query("algo_name == '%s'" %algo_name).groupby(['q'])['std_vol'].sem(ddof = 0)
+for algo_name , label in zip (['Louvain_g', 'Louvain_b'] , ['Hypergraph', 'Clique expansion']) : 
+    df = pd.DataFrame( partitions[partitions['algo_name'] == algo_name].groupby(['q'])['std_vol'].mean())
+    df['error'] = partitions[partitions['algo_name'] == algo_name].groupby(['q'])['std_vol'].sem(ddof = 0)
 
-    df['std_vol'].plot(ax =ax , label = algo_name )
+    df['std_vol'].plot(ax =ax , label = label )
     ax.fill_between(df.index, df['std_vol']+df['error'],  df['std_vol']-df['error'], alpha = 0.5)
     
 ax.legend()
@@ -134,8 +159,8 @@ fig.savefig(path +'Figures/categorial composition.pdf')
 
 #Compute orga_similarity 
   
-M=vectorization_agents_orga(clusters, FM , list(orga_cat.keys()))
-#M = vectorization_agents_cat(clusters, FM , orga_cat)
+#M=vectorization_agents_orga(clusters, FM , list(orga_cat.keys()))
+M = vectorization_agents_cat(clusters, FM , orga_cat)
 
 cos_intra = intra_similarity(M)
 cos_inter = inter_similarity(M)
@@ -150,7 +175,7 @@ plt.xlabel('Similarity')
 plt.ylabel('Density')
 plt.legend()
 plt.tight_layout()
-fig.savefig(path +'Figures/orga_sim.pdf')
+fig.savefig(path +'Figures/cat_sim.pdf')
 ##
 #Compute category similarity with random assignation of category for organizations
 nb_itt =200
@@ -248,13 +273,13 @@ B = nx.Graph()
 
 # Add nodes with the node attribute "bipartite"
 for e , c in zip(I.names_col , clusters[1]):
-    B.add_node(e, bipartite= 'edge', cluster = c)
+    B.add_node(e, bipartite= 'edge', cluster = c+1)
 for a , c in zip(I.names , clusters[0]):
-    B.add_node(a, bipartite= 'node', cluster = c)
-
+    B.add_node(a, bipartite= 'node', cluster = c+1 , strength = H.nodes[a].strength )
+# Edges to form a bipartite network
 for edge , node , w_ in zip (s_edges[0] , s_edges[1] , s_weights):
     B.add_edge( edge, node , weight =w_)
 
 
-nx.write_gexf(B, path+"export2gephi/test.gexf")
+nx.write_gexf(B, path+"Network.gexf")
     

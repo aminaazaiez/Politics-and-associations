@@ -43,7 +43,7 @@ def set_functions(mode):
         return(f,g,psi,phi)
         
 
-def eigenvector (H, mode , indecies) :
+def eigenvector (H, mode , indicies) :
     maxiter = 1000
     tol = 1e-5
     f,g,psi,phi = set_functions(mode)
@@ -75,7 +75,7 @@ def eigenvector (H, mode , indecies) :
             x = np.reshape(x, n)
             y = np.reshape(y,m)
             eigenvector_centrality = {idx[i] : x[i] for i in range(len(idx))}
-            return(eigenvector_centrality)
+            return([eigenvector_centrality[agent]  for agent in indicies])
             
         else :
             x0 = np.copy(x)

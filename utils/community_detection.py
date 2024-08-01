@@ -26,6 +26,8 @@ def Clustering(adjacency_matrix, algo_name, res =1, random_state =0, get_edge_la
             return(louvain.labels_row_ )
     elif algo_name == 'Louvain_g':
         return(louvain.labels_)
+
+
         
 def modularity(adjacency_matrix, algo_name , partition):
     if algo_name == 'Louvain_b':
@@ -33,6 +35,8 @@ def modularity(adjacency_matrix, algo_name , partition):
     elif algo_name =='Louvain_g':
         return(get_modularity(adjacency_matrix, partition))
     else : print('Error')
+
+
 
 def partition_with_highest_mod(H, algo_name, nb_itt, return_idx = False):
     ''' Partition the nodes and edges into clusters using the modularity function for bipartite graph proposed by Barder (2007) and the Newmann modularity function for the clique expansion 
@@ -63,7 +67,7 @@ def partition_with_highest_mod(H, algo_name, nb_itt, return_idx = False):
 
     
 ##  Mutual information  
-def mutual_inofmation_btw_equal_sized_partitions(partitions):
+def mutual_information_btw_equaly_sized_partitions(partitions):
     mis=[]
     qs =[]
     for q in  set(partitions['q']):

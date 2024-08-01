@@ -53,6 +53,8 @@ def vectorization_agents_orga(clusters ,FM, orgas):
                 M_c[i,j] =1
         M.append(M_c)
     return(M)
+    
+    
 def vectorization_agents_cat(clusters ,FM, orga_cat_):
     M = []
     categories = list(set(orga_cat_.values())) 
@@ -65,6 +67,7 @@ def vectorization_agents_cat(clusters ,FM, orga_cat_):
                 M_c[i,j] =1
         M.append(M_c)
     return(M)
+    
 
 def inter_similarity(M):
     cos =[]
