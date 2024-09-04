@@ -1,23 +1,29 @@
+''' General functions  '''
+import itertools
 import numpy as np
 from sknetwork.data import from_edge_list
 import networkx as nx
-import itertools
 
+def gini(A):
+    """Calculate the Gini coefficient of a numpy array."""
 
-def cdf (ax, data, label):
-    N=len(data)
-    # sort the data in ascending order
+    array = np.array(A)
+    array = array.flatten()
+    if np.amin(array) < 0:
+        array -= np.amin(array)
+    array = array + 0.0000001
+    array = np.sort(array)
+    index = np.arange(1,array.shape[0]+1)
+    n = array.shape[0]
+    return ((np.sum((2 * index - n  - 1) * array)) / (n * np.sum(array))) 
+
+def ccdf (data):
+    ''' Complementary cumulative distribution function plot'''
+    data = list(data)
+    N = len(data)
     x = np.sort(data)
-    # get the cdf values of y
     y = 1 - (np.arange(N) / float(N))
-    # plotting
-    ax.set_xlabel(label)
-    ax.set_ylabel('CDF of %s' %label.lower())
-    ax.plot(x, y, marker='o', markersize = 1.5, linewidth =0)
-    #ax.title('cdf of %s in log log scale' %label)
-    ax.set_yscale('log')
-    ax.set_xscale('log')
-    return(ax)
+    return x,y 
     
 def part2dict(A):
     """
@@ -52,14 +58,14 @@ def array2dict(A, node_labels):
 ## clique_expansion using networkx 
 def nx_clique_expansion(H):
     I = nx.Graph()
-    dict = {}
+    edge = {}
     for e in H.edges():
         for u, v in itertools.combinations(H.edges[e],2):
             try:
-                dict[(u,v)]+= H.edges[e].weight
-            except:
-                dict[(u,v)]= H.edges[e].weight
-    for (u,v), w in dict.items():
+                edge[(u,v)]+= H.edges[e].weight
+            except Exception:
+                edge[(u,v)]= H.edges[e].weight
+    for (u,v), w in edge.items():
         I.add_edge(u,v, weight =w )
     return(I)
 ## clique_expansion using sknetwork 
@@ -83,8 +89,7 @@ def create_sknetwork_bipartite(H):
     return graph 
 
 
-#
-def check_algo_name(H, algo_name):
+def generate_adjacency_matrix(H, algo_name):
     if algo_name == 'Louvain_b':
         network =  create_sknetwork_bipartite(H)
         adjacency_matrix = network.biadjacency
@@ -93,5 +98,5 @@ def check_algo_name(H, algo_name):
         network =  create_sknetwork_graph_n(H)
         adjacency_matrix = network.adjacency
     else :
-        print('Error, choose algo name between Louvain_b and Louvain_g')
+        print('Error, choose algo name among Louvain_b and Louvain_g')
     return( adjacency_matrix)

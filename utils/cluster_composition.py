@@ -1,17 +1,12 @@
-import networkx as nx
-from utils.general import part2dict
+''' Anlayse clusters' compisition '''
 from collections import Counter
 import itertools
-from networkx.drawing.nx_agraph import  graphviz_layout
-import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 
-  
 
-
-## Cluster composition 
-def cumulated_membership_per_cluster(clusters, id, asso_cat):
+## Cluster composition
+def aggregated_membership_per_cluster(clusters, memberships, asso_cat):
     ''' clusters  = {i : cluster[i]}  clusters is dictionary where i in the index of the cluster and clusters[i] is a list of the agent in the cluster_i 
         FM  ={ agent : memberships of agent i } is dictionnary where the keys are the agents and the values are the list of categroy(formal membership) of agent 
         return list of counters, each counter corresponds to the number of categories in a cluster. If an agent is memeber of two educationnal associations, this will contribute 2 '''
@@ -19,30 +14,15 @@ def cumulated_membership_per_cluster(clusters, id, asso_cat):
     for cluster in clusters.values():
         count = Counter()
         for agent in cluster :
-            count += Counter([asso_cat[ membership ]for membership in id[agent]])
+            count += Counter([asso_cat[ membership ]for membership in memberships[agent]])
         result.append(count)
     return (result)
     
-def cluster_composition_bar_plot(ax, result, category ) :
-    ''' result ={cluster :  list of n integers that referes to the number of agents in cluster that are in category[i]. n = len(category)
-        category = list of categories
-        return : bar plot. Each bar refer to a cluster. The bar_i is partionned in different colors and the colors correponds to the diffenret categories '''
-    palette = sns.color_palette( 'Paired', len(category))
-    labels = np.array(list(result.keys() )) +1
-    data = np.array(list(result.values()))
-    data_cum = data.cumsum(axis=1)
-    for i, (colname, color) in enumerate(zip(category, palette)):
-        heights = data[:, i]
-        starts = data_cum[:, i] - heights
-        rects = ax.bar(x=labels, height =heights, bottom=starts, 
-                        label=colname, color=color)
-    ax.set_ylabel('Cumulated membership')
-    ax.set_xlabel('Cluster')
-    ax.set_xticks(labels)
-    return(ax)
+
     
 ## Similarity between agents
 def vectorization_agents_orga(clusters ,FM, orgas):
+    ''' Assign a vector for each agents. M_ij = 1 if agent i belong to asso j, 0 othewise '''
     M = []
     for c in clusters.values():
         M_c = np.zeros(shape = (len(c), len(orgas))) #  M_ij = 1 if agent i belong to asso j, 0 othewise
@@ -54,8 +34,8 @@ def vectorization_agents_orga(clusters ,FM, orgas):
         M.append(M_c)
     return(M)
     
-    
 def vectorization_agents_cat(clusters ,FM, orga_cat_):
+    ''' M_ij = 1 if agent i belong to orga category j, 0 othewise '''
     M = []
     categories = list(set(orga_cat_.values())) 
     for c in clusters.values():

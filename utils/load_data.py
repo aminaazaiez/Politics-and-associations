@@ -1,7 +1,8 @@
+''' Functions to load data'''
 import pandas as pd
 import hypernetx as hnx
 
-##
+
 def split_data(edges_ , w_):
     splited_edges =[]
     splited_weights =[]
@@ -12,9 +13,9 @@ def split_data(edges_ , w_):
     s_edges= pd.DataFrame(splited_edges)
     return(s_edges, splited_weights)
     
-def create_hypergraph(edges_, w_):    
+def initialize_hypergraph(edges_, w_):
     s_edges, s_weights = split_data(edges_ , w_)
-    H=hnx.Hypergraph(s_edges, weights = s_weights)
+    H = hnx.Hypergraph(s_edges, weights = s_weights)
     for e in H.edges:
         H.edges[e].weight = w_[e]
     for i in H.nodes() :

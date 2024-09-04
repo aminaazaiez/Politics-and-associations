@@ -1,5 +1,4 @@
 import pandas as pd
-import hypernetx as hnx
 import numpy as np
 from collections import Counter
 from sknetwork.ranking import Betweenness
@@ -8,25 +7,23 @@ from scipy import stats
 
 import matplotlib.pyplot as plt
 
-import sys 
-sys.path.insert(1, '/home/azaiez/Documents/Cours/These/Politics and Associations/Programs')
-from utils.load_data import *
 from utils.general import *
 from utils.community_detection import *
 from utils.cluster_composition import *
-from utils.centrality import *
+from utils.centrality import eigenvector, core_to_periphery, diversity, political_participation
+from utils.load_data import split_data, initialize_hypergraph
 
 ### Load Data and create the Hypergraph
 
-path='/home/azaiez/Documents/Cours/These/Politics and Associations/Programs/'
 
-activities = pd.read_excel( path+'activities.ods',engine='odf', index_col = 'Activity')
-individuals = pd.read_excel( path+'individual_carac.ods',engine='odf', index_col = 'Individual')
-orga = pd.read_excel( path+ 'orga_carac.ods',engine='odf', index_col = 'Orga')
+
+activities = pd.read_csv( '../data/activities.csv', index_col = 'Activity')
+individuals = pd.read_csv( '../data/individuals.csv', index_col = 'Individual')
+orga = pd.read_csv(  '../data/organizations.csv', index_col = 'Orga')
 
 w= [F for F in activities['Frequency']] # weights
 edges = [s.split('/') for s in list( activities ['Individuals'])]
-H = create_hypergraph(edges, w)
+H = initialize_hypergraph(edges, w)
 
 orga_cat = { orga_id : cat for orga_id, cat in zip (orga.index, orga['Category'])} 
 FM = { individual_id : list(formal_membership.split("/")) for individual_id, formal_membership in zip (individuals.index, individuals['Membership'])} 
@@ -41,7 +38,7 @@ for feature,label,notation in zip(features,labels, notations):
     fig , ax = plt.subplots(figsize = (3,3))
     ax = cdf(ax,feature, label)
     plt.tight_layout()
-    plt.savefig(path +'Figures/%s.pdf' %label)
+    plt.savefig( './out/%s.pdf' %label)
     plt.close(fig)
 ############# Community detection ###############
 #Generate random partitions with different resoltution parameters
@@ -55,7 +52,7 @@ for algo_name in ['Louvain_b', 'Louvain_g']:
     for r in rs:
         print('r = %.2f')
         for i in range (nb_itt):
-            partition = Clustering(adjacency_matrix , algo_name, res=r, random_state = i ) 
+            partition = clustering(adjacency_matrix , algo_name, res=r, random_state = i ) 
             partitions = pd.concat([partitions, pd.DataFrame({'seed' : i, 'r' : r, 'Partition' : [partition], 'algo_name' :algo_name, 'q' : np.max(partition) +1}) ], ignore_index=True )
             
 #save partition to json file
@@ -64,7 +61,7 @@ for algo_name in ['Louvain_b', 'Louvain_g']:
 ## resolution parameter r = 1
 #Mutual information between partitions for r=1 for both alogrithms separately
 
-partitions = pd.read_json(path + 'random_partitions.json')
+partitions = pd.read_json( './random_partitions.json')
 algo_name = ['Louvain_g' , 'Louvain_b']
 for algo in algo_name:
     ps = partitions[(partitions['r'] == 1) & (partitions['algo_name'] == algo)]['Partition']
@@ -93,7 +90,7 @@ ax.scatter(nb_clusters, mi, s =10, alpha =0.1)
 ax.set_xlabel('$q$')
 ax.set_ylabel(r'$I_{norm}$')
 plt.tight_layout()
-fig.savefig(path +'Figures/MI_vs_nb_clusters.png')
+fig.savefig('./out/MI_vs_nb_clusters.png')
 
 #Standard deviation of clusters' volume
 network = create_sknetwork_bipartite(H)
@@ -119,7 +116,7 @@ for algo_name , label in zip (['Louvain_g', 'Louvain_b'] , ['Hypergraph', 'Cliqu
 ax.legend()
 ax.set_ylabel('std')    
 plt.tight_layout()
-fig.savefig(path+'Figures/std_comm_vol_vs_nb_clusters.pdf')
+fig.savefig('./out/std_comm_vol_vs_nb_clusters.pdf')
 plt.close(fig)
 
 ############# Cluster Composition ###############
@@ -154,7 +151,7 @@ fig, ax = plt.subplots(figsize=(9.2, 5))
 ax = cluster_composition_bar_plot(ax, result, categories )
 ax.legend(ncol =2, loc='upper right')
 ax.set_title('Clustering of nodes')
-fig.savefig(path +'Figures/categorial composition.pdf')
+fig.savefig('./out/categorial composition.pdf')
 ## Similarity between agents
 
 #Compute orga_similarity 
@@ -175,7 +172,7 @@ plt.xlabel('Similarity')
 plt.ylabel('Density')
 plt.legend()
 plt.tight_layout()
-fig.savefig(path +'Figures/cat_sim.pdf')
+fig.savefig('./out/cat_sim.pdf')
 ##
 #Compute category similarity with random assignation of category for organizations
 nb_itt =200
@@ -211,7 +208,7 @@ for ax, similarity , sim_type , colors in zip (axs,[ [cos_inter_emp,c_inter.valu
     ax.set_xlabel('Similarity')
     ax.set_ylabel('Density')
     ax.legend()
-fig.savefig(path +'Figures/random_cat_sim.pdf')
+fig.savefig('./out/random_cat_sim.pdf')
 
 ######################### Centrality ##########################
 nb_itt = 700
@@ -243,7 +240,7 @@ closeness = nx.closeness_centrality(I, distance = 'weight')
 individuals['Betweenness'] = [ btw_weighted_nx[agent]  for agent in individuals.index]
 individuals['Closeness'] = [ closeness[agent]  for agent in individuals.index]
 #Political participation
-pol = Political_Body(orga_cat = orga_cat, individuals = individuals)
+pol = political_body(orga_cat = orga_cat, individuals = individuals)
 individuals['Political Participation'] = political_participation(H , individuals,  individuals.index)
 # print correlation btw political participation and centralities
 centralities_label  = [ 'Strength','Diversity', 'EV linear', 'EV log expo' , 'EV max','Core to Periphery' , 'Betweenness', 'Closeness' ]
@@ -281,5 +278,5 @@ for edge , node , w_ in zip (s_edges[0] , s_edges[1] , s_weights):
     B.add_edge( edge, node , weight =w_)
 
 
-nx.write_gexf(B, path+"Network.gexf")
+nx.write_gexf(B, "./Network.gexf")
     

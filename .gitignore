@@ -1,0 +1,11 @@
+out
+archives
+.venv
+__pycache__
+
+main_not_clean.ipynb
+random_partitions.csv
+visualization.gephi
+main.py
+Network.gexf
+utils/test_h_old_eq_h_new.py
